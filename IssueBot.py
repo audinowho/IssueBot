@@ -5,14 +5,17 @@ import urllib
 import traceback
 import asyncio
 import json
-import datetime
+import requests
 import git
 import sys
 import re
+import IssueUtils
+
 
 # Housekeeping for login information
 TOKEN_FILE_PATH = 'token.txt'
 CONFIG_FILE_PATH = 'config.json'
+PRIVATE_KEY_FILE_PATH = 'private-key.pem'
 
 scdir = os.path.dirname(os.path.abspath(__file__))
 
@@ -42,6 +45,10 @@ class BotConfig:
         self.error_ch = 0
         self.update_ch = 0
         self.update_msg = 0
+        self.repo_owner = ""
+        self.repo_name = ""
+        self.app_id = ""
+        self.install_id = ""
         self.servers = {}
 
         if main_dict is None:
@@ -75,6 +82,8 @@ class IssueBot:
         self.need_restart = False
         with open(os.path.join(self.path, CONFIG_FILE_PATH)) as f:
             self.config = BotConfig(json.load(f))
+        self.private_key = open(PRIVATE_KEY_FILE_PATH, 'r').read()
+
 
         self.client = client
 
@@ -129,10 +138,10 @@ class IssueBot:
 
         return False
 
-
     async def pushIssue(self, msg):
         # push issue to git
-        msg_lines = msg.content.split('\n')
+        header = IssueUtils.get_access_token_header(self.private_key, self.config.app_id, self.config.install_id)
+        url = IssueUtils.create_issue(header, self.config.repo_owner, self.config.repo_name, "Test", msg.content)
         # react with a star... and a reply?
         await msg.add_reaction('\U00002B50')
 
