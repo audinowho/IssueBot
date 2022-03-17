@@ -2,6 +2,7 @@ import json
 import requests
 import jwt
 import time
+from urllib.error import HTTPError
 
 
 
@@ -12,9 +13,9 @@ def create_bearer_token_header(private_key, app_id):
     payload = {
         # issued at time
         # steupid Daylight Savings Time.  Have to turn it back an hour to be valid.
-        'iat': time_since_epoch_in_seconds - (60 * 60),
+        'iat': time_since_epoch_in_seconds,
         # JWT expiration time (10 minute maximum)
-        'exp': time_since_epoch_in_seconds - (60 * 60) + (10 * 60),
+        'exp': time_since_epoch_in_seconds + (10 * 60),
         # GitHub App's identifier
         'iss': app_id
     }
@@ -30,6 +31,7 @@ def get_access_token_header(private_key, app_id, install_id):
     # https://github.community/t/how-to-get-github-app-installation-id-for-a-user/127276
     resp = requests.post('https://api.github.com/app/installations/{}/access_tokens'.format(install_id),
                          headers=create_bearer_token_header(private_key, app_id))
+    resp.raise_for_status()
 
     resp_json = json.loads(resp.content.decode())
 
@@ -42,6 +44,7 @@ def create_issue(headers, repo_owner, repo_name, title, body):
     issue = {'title': title,
              'body': body}
     resp = requests.post(url, json=issue, headers=headers)
+    resp.raise_for_status()
 
     resp_json = json.loads(resp.content.decode())
     issue_url = resp_json["url"]
@@ -50,6 +53,7 @@ def create_issue(headers, repo_owner, repo_name, title, body):
 def add_issue_label(headers, repo_owner, repo_name, issue_id, labels):
     url = 'https://api.github.com/repos/%s/%s/issues/%s/labels' % (repo_owner, repo_name, issue_id)
     resp = requests.post(url, json=labels, headers=headers)
+    resp.raise_for_status()
 
     resp_json = json.loads(resp.content.decode())
     #issue_url = resp_json["url"]
@@ -57,6 +61,7 @@ def add_issue_label(headers, repo_owner, repo_name, issue_id, labels):
 def request_app(private_key, app_id):
 
     resp = requests.get('https://api.github.com/app', headers=create_bearer_token_header(private_key, app_id))
+    resp.raise_for_status()
 
     print('Code: ', resp.status_code)
     print('Content: ', resp.content.decode())
