@@ -139,11 +139,22 @@ class IssueBot:
         return False
 
     async def pushIssue(self, msg):
+        args = msg.content.split(' ')
+        title = " ".join(args[1:])
+        issue_msg = await self.client.get_channel(msg.reference.channel_id).fetch_message(msg.reference.message_id)
+        await msg.delete()
         # push issue to git
         header = IssueUtils.get_access_token_header(self.private_key, self.config.app_id, self.config.install_id)
-        url = IssueUtils.create_issue(header, self.config.repo_owner, self.config.repo_name, "Test", msg.content)
+        body = "Discord: {0}#{1} {2}".format(issue_msg.author.name, issue_msg.author.discriminator,
+                                              issue_msg.author.mention)
+        body += "\n\n"
+        body += issue_msg.content
+        for attachment in issue_msg.attachments:
+            body += "\n![image]({0})".format(attachment.url)
+
+        url = IssueUtils.create_issue(header, self.config.repo_owner, self.config.repo_name, title, body)
         # react with a star... and a reply?
-        await msg.add_reaction('\U00002B50')
+        await issue_msg.add_reaction('\U000021A9')
 
 
     async def checkAllSubmissions(self):
@@ -298,13 +309,13 @@ async def on_message(msg: discord.Message):
         server = issue_bot.config.servers[guild_id_str]
         prefix = server.prefix
 
-        if msg.channel.id == server.chat:
-            if not content.startswith(prefix):
-                return
-            args = content[len(prefix):].split(' ')
+        if not content.startswith(prefix):
+            return
+        args = content[len(prefix):].split(' ')
+        base_arg = args[0].lower()
 
+        if msg.channel.id == server.chat:
             authorized = await issue_bot.isAuthorized(msg.author, msg.guild)
-            base_arg = args[0].lower()
             if base_arg == "help":
                 await issue_bot.help(msg, args[1:])
             elif base_arg == "staffhelp":
@@ -314,6 +325,13 @@ async def on_message(msg: discord.Message):
                 await issue_bot.updateBot(msg)
             else:
                 await msg.channel.send(msg.author.mention + " Unknown Command.")
+        elif msg.reference is not None:
+            authorized = await issue_bot.isAuthorized(msg.author, msg.guild)
+            if base_arg == "issue" and authorized:
+                await issue_bot.pushIssue(msg)
+            else:
+                await msg.add_reaction('\U0000274C')
+
 
     except Exception as e:
         await issue_bot.sendError(traceback.format_exc())
@@ -322,6 +340,8 @@ async def on_message(msg: discord.Message):
 async def on_raw_reaction_add(payload):
     await client.wait_until_ready()
     try:
+        return
+
         if payload.user_id == client.user.id:
             return
         guild_id_str = str(payload.guild_id)
