@@ -39,10 +39,11 @@ def get_access_token_header(private_key, app_id, install_id):
                "Accept": "application/vnd.github.machine-man-preview+json"}
     return headers
 
-def create_issue(headers, repo_owner, repo_name, title, body):
+def create_issue(headers, repo_owner, repo_name, title, body, labels):
     url = 'https://api.github.com/repos/%s/%s/issues' % (repo_owner, repo_name)
     issue = {'title': title,
-             'body': body}
+             'body': body,
+             'labels': labels}
     resp = requests.post(url, json=issue, headers=headers)
     resp.raise_for_status()
 

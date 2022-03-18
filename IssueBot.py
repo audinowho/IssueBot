@@ -138,7 +138,7 @@ class IssueBot:
 
         return False
 
-    async def pushIssue(self, msg):
+    async def pushIssue(self, msg, labels):
         args = msg.content.split(' ')
         title = " ".join(args[1:])
         issue_msg = await self.client.get_channel(msg.reference.channel_id).fetch_message(msg.reference.message_id)
@@ -152,7 +152,7 @@ class IssueBot:
         for attachment in issue_msg.attachments:
             body += "\n![image]({0})".format(attachment.url)
 
-        url = IssueUtils.create_issue(header, self.config.repo_owner, self.config.repo_name, title, body)
+        url = IssueUtils.create_issue(header, self.config.repo_owner, self.config.repo_name, title, body, labels)
         # react with a star... and a reply?
         await issue_msg.add_reaction('\U000021A9')
 
@@ -329,6 +329,10 @@ async def on_message(msg: discord.Message):
             authorized = await issue_bot.isAuthorized(msg.author, msg.guild)
             if base_arg == "issue" and authorized:
                 await issue_bot.pushIssue(msg)
+            elif base_arg == "bug" and authorized:
+                await issue_bot.pushIssue(msg, ["bug"])
+            elif base_arg == "enhancement" and authorized:
+                await issue_bot.pushIssue(msg, ["enhancement"])
             else:
                 await msg.add_reaction('\U0000274C')
 
