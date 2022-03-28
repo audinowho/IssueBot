@@ -328,7 +328,9 @@ async def on_message(msg: discord.Message):
         elif msg.reference is not None:
             authorized = await issue_bot.isAuthorized(msg.author, msg.guild)
             if base_arg == "issue" and authorized:
-                await issue_bot.pushIssue(msg)
+                await issue_bot.pushIssue(msg, [])
+            elif base_arg == "text" and authorized:
+                await issue_bot.pushIssue(msg, ["text"])
             elif base_arg == "bug" and authorized:
                 await issue_bot.pushIssue(msg, ["bug"])
             elif base_arg == "enhancement" and authorized:
@@ -343,18 +345,17 @@ async def on_message(msg: discord.Message):
 @client.event
 async def on_raw_reaction_add(payload):
     await client.wait_until_ready()
-    try:
-        return
+    #try:
 
-        if payload.user_id == client.user.id:
-            return
-        guild_id_str = str(payload.guild_id)
-        if payload.channel_id == issue_bot.config.servers[guild_id_str].issue:
-            msg = await client.get_channel(payload.channel_id).fetch_message(payload.message_id)
-            await issue_bot.pollSubmission(msg)
+        #if payload.user_id == client.user.id:
+        #    return
+        #guild_id_str = str(payload.guild_id)
+        #if payload.channel_id == issue_bot.config.servers[guild_id_str].issue:
+        #    msg = await client.get_channel(payload.channel_id).fetch_message(payload.message_id)
+        #    await issue_bot.pollSubmission(msg)
 
-    except Exception as e:
-        await issue_bot.sendError(traceback.format_exc())
+    #except Exception as e:
+    #    await issue_bot.sendError(traceback.format_exc())
 
 issue_bot = IssueBot(scdir, client)
 
