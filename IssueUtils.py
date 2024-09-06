@@ -2,7 +2,6 @@ import json
 import requests
 import jwt
 import time
-from urllib.error import HTTPError
 
 
 

@@ -1,14 +1,9 @@
 import os
-import io
 import discord
-import urllib
 import traceback
-import asyncio
 import json
-import requests
 import git
 import sys
-import re
 import IssueUtils
 
 
