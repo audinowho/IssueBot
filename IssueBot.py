@@ -40,6 +40,7 @@ class BotConfig:
         self.error_ch = 0
         self.update_ch = 0
         self.update_msg = 0
+        self.after_post = 0
         self.repo_owner = ""
         self.repo_name = ""
         self.app_id = ""
@@ -69,7 +70,7 @@ class BotConfig:
 
 class IssueBot:
     """
-    A class for handling recolors
+    A class for handling issues
     """
     def __init__(self, in_path, client):
         # init data
@@ -152,27 +153,40 @@ class IssueBot:
         await issue_msg.add_reaction('\U000021A9')
 
 
-    async def checkAllSubmissions(self):
+    async def linkEarliestUnresolved(self, msg):
 
-        # make sure they are re-added
-        for server in self.config.servers:
-            ch_id = self.config.servers[server].issue
-            msgs = []
-            channel = self.client.get_channel(ch_id)
-            async for message in channel.history(limit=None):
-                msgs.append(message)
-            for msg in msgs:
+        ch_id = self.config.servers[str(msg.guild.id)].issue
+        earliest_unresolved = self.config.after_post
+        channel = self.client.get_channel(ch_id)
+        prevMsg = None
+        while True:
+            count = 0
+            async for msg in channel.history(limit=100, before=prevMsg):
+                count += 1
+                prevMsg = msg
+                if msg.id < self.config.after_post:
+                    break
                 try:
-                    await self.pollSubmission(msg)
+                    needs_attention = await self.checkNeedsAttention(msg)
+                    if needs_attention:
+                        earliest_unresolved = msg.id
                 except Exception as e:
                     await self.sendError(traceback.format_exc())
+            if count == 0:
+                break
+
+        await msg.channel.send(msg.author.mention + "Earliest unresolved issue: https://discord.com/channels/{0}/{1}/{2}".format(msg.guild.id, ch_id, earliest_unresolved))
+
+        self.config.after_post = earliest_unresolved
+        self.saveConfig()
 
 
-    async def pollSubmission(self, msg):
-        # check for messages in #submissions
+    async def checkNeedsAttention(self, msg):
+        # check for messages in #bug-reports
+        if msg.author.id == self.client.user.id:
+            return False
 
-        cks = None
-        ss = None
+        reacted = False
         remove_users = []
         for reaction in msg.reactions:
             if reaction.emoji == '\u2705':
@@ -181,27 +195,14 @@ class IssueBot:
                 ss = reaction
             else:
                 async for user in reaction.users():
-                    remove_users.append((reaction, user))
+                    if user.id == self.config.root:
+                        reacted = True
+                    elif user.id == self.client.user.id:
+                        reacted = True
+                    #else:
+                    #    remove_users.append((reaction, user))
 
-        auto = False
-        if cks:
-            async for user in cks.users():
-                if user.id == self.config.root:
-                    auto = True
-                else:
-                    remove_users.append((cks, user))
-        if ss:
-            async for user in ss.users():
-                if user.id != self.client.user.id:
-                    pass
-                else:
-                    remove_users.append((ss, user))
-
-        for reaction, user in remove_users:
-            await reaction.remove(user)
-
-        if auto:
-            await self.pushIssue(msg)
+        return not reacted
 
 
     async def initServer(self, msg, args):
@@ -274,7 +275,6 @@ async def on_ready():
     print(client.user.name)
     print(client.user.id)
     global issue_bot
-    # await issue_bot.checkAllSubmissions()
     await issue_bot.checkRestarted()
     print('------')
 
@@ -316,22 +316,25 @@ async def on_message(msg: discord.Message):
             elif base_arg == "staffhelp":
                 await issue_bot.staffhelp(msg, args[1:])
                 # primary commands
+            elif base_arg == "unresolved":
+                await issue_bot.linkEarliestUnresolved(msg)
             elif base_arg == "update" and msg.author.id == issue_bot.config.root:
                 await issue_bot.updateBot(msg)
             else:
                 await msg.channel.send(msg.author.mention + " Unknown Command.")
-        elif msg.reference is not None:
-            authorized = await issue_bot.isAuthorized(msg.author, msg.guild)
-            if base_arg == "issue" and authorized:
-                await issue_bot.pushIssue(msg, [])
-            elif base_arg == "text" and authorized:
-                await issue_bot.pushIssue(msg, ["text"])
-            elif base_arg == "bug" and authorized:
-                await issue_bot.pushIssue(msg, ["bug"])
-            elif base_arg == "enhancement" and authorized:
-                await issue_bot.pushIssue(msg, ["enhancement"])
-            else:
-                await msg.add_reaction('\U0000274C')
+        elif msg.channel.id == server.issue:
+            if msg.reference is not None:
+                authorized = await issue_bot.isAuthorized(msg.author, msg.guild)
+                if base_arg == "issue" and authorized:
+                    await issue_bot.pushIssue(msg, [])
+                elif base_arg == "text" and authorized:
+                    await issue_bot.pushIssue(msg, ["text"])
+                elif base_arg == "bug" and authorized:
+                    await issue_bot.pushIssue(msg, ["bug"])
+                elif base_arg == "enhancement" and authorized:
+                    await issue_bot.pushIssue(msg, ["enhancement"])
+                else:
+                    await msg.add_reaction('\U0000274C')
 
 
     except Exception as e:
