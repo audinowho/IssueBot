@@ -15,7 +15,9 @@ PRIVATE_KEY_FILE_PATH = 'private-key.pem'
 scdir = os.path.dirname(os.path.abspath(__file__))
 
 # The Discord client.
-client = discord.Client()
+intent = discord.Intents.default()
+intent.message_content = True
+client = discord.Client(intents=intent)
 
 class BotServer:
 
@@ -155,21 +157,23 @@ class IssueBot:
 
     async def linkEarliestUnresolved(self, msg):
 
-        ch_id = self.config.servers[str(msg.guild.id)].issue
-        earliest_unresolved = self.config.after_post
+        server = self.config.servers[str(msg.guild.id)]
+        ch_id = server.issue
+        earliest_unresolved = server.after_post
         channel = self.client.get_channel(ch_id)
         prevMsg = None
         while True:
             count = 0
-            async for msg in channel.history(limit=100, before=prevMsg):
+            async for message in channel.history(limit=100, before=prevMsg):
                 count += 1
-                prevMsg = msg
-                if msg.id < self.config.after_post:
+                prevMsg = message
+                if message.id < server.after_post:
+                    count = 0
                     break
                 try:
-                    needs_attention = await self.checkNeedsAttention(msg)
+                    needs_attention = await self.checkNeedsAttention(message)
                     if needs_attention:
-                        earliest_unresolved = msg.id
+                        earliest_unresolved = message.id
                 except Exception as e:
                     await self.sendError(traceback.format_exc())
             if count == 0:
@@ -177,30 +181,27 @@ class IssueBot:
 
         await msg.channel.send(msg.author.mention + "Earliest unresolved issue: https://discord.com/channels/{0}/{1}/{2}".format(msg.guild.id, ch_id, earliest_unresolved))
 
-        self.config.after_post = earliest_unresolved
+        server.after_post = earliest_unresolved
         self.saveConfig()
 
 
     async def checkNeedsAttention(self, msg):
         # check for messages in #bug-reports
-        if msg.author.id == self.client.user.id:
+        if msg.author.bot == True:
+            return False
+
+        if msg.type == discord.MessageType.thread_created:
             return False
 
         reacted = False
-        remove_users = []
         for reaction in msg.reactions:
-            if reaction.emoji == '\u2705':
-                cks = reaction
-            elif reaction.emoji == '\u2B50':
-                ss = reaction
-            else:
-                async for user in reaction.users():
-                    if user.id == self.config.root:
-                        reacted = True
-                    elif user.id == self.client.user.id:
-                        reacted = True
-                    #else:
-                    #    remove_users.append((reaction, user))
+            async for user in reaction.users():
+                if user.id == self.config.root:
+                    reacted = True
+                elif user.id == self.client.user.id:
+                    reacted = True
+                #else:
+                #    remove_users.append((reaction, user))
 
         return not reacted
 
