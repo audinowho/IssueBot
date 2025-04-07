@@ -24,6 +24,8 @@ class BotServer:
     def __init__(self, main_dict=None):
         self.issue = 0
         self.chat = 0
+        self.after_post = 0
+        self.threads = []
         self.prefix = ""
 
         if main_dict is None:
@@ -42,7 +44,6 @@ class BotConfig:
         self.error_ch = 0
         self.update_ch = 0
         self.update_msg = 0
-        self.after_post = 0
         self.repo_owner = ""
         self.repo_name = ""
         self.app_id = ""
@@ -136,6 +137,19 @@ class IssueBot:
 
         return False
 
+    async def respondInvalid(self, issue_reporter, msg):
+        if msg.author.id == issue_reporter:
+            await msg.add_reaction('\U0000274C')
+        else:
+            remove_users = []
+            for reaction in msg.reactions:
+                async for user in reaction.users():
+                    if user.id == issue_reporter:
+                        remove_users.append((reaction, user))
+
+            for reaction, user in remove_users:
+                await reaction.remove(user)
+
     async def pushIssue(self, msg, labels):
         args = msg.content.split(' ')
         title = " ".join(args[1:])
@@ -187,7 +201,7 @@ class IssueBot:
 
     async def checkNeedsAttention(self, msg):
         # check for messages in #bug-reports
-        if msg.author.bot == True:
+        if msg.author.bot:
             return False
 
         if msg.type == discord.MessageType.thread_created:
@@ -205,6 +219,165 @@ class IssueBot:
 
         return not reacted
 
+
+    async def beginIssue(self, msg):
+        # create the thread
+        thread = await msg.create_thread(name=msg.content.split('\n')[0][:50])
+        # Click :leftwards_arrow_with_hook: to undo the last answer.
+        return_txt = "Thread created.  The bot will ask some questions.  Answering them will expedite the process."
+        survey_msg = await thread.send(return_txt)
+        return_txt = msg.author.mention + "\n1. Is this a :beetle: Bug, :bulb: Feature Request, or :abc: Text Mistake?"
+        survey_msg = await thread.send(return_txt)
+        await survey_msg.add_reaction('\U0001FAB2')
+        await survey_msg.add_reaction('\U0001F4A1')
+        await survey_msg.add_reaction('\U0001F524')
+
+        server = self.config.servers[str(msg.guild.id)]
+        server.threads.append(thread.id)
+        self.saveConfig()
+
+    async def getCurrentStep(self, thread):
+        server = self.config.servers[str(thread.guild.id)]
+
+        if thread.id in server.threads:
+            # get the latest message written by the bot
+            async for message in thread.history(limit=None):
+                if message.author.id == self.client.user.id:
+                    message_lines = message.content.split('\n')
+                    mention = message.mentions[0].id
+                    prefix = message_lines[1].split('.')[0]
+                    return mention, prefix, message
+
+        return None, None, None
+
+
+    async def moveToNextStep(self, issue_reporter, prefix, msg):
+        thread = msg.channel
+        completed = False
+
+        if prefix == "1":
+            if await self.chose_emoji(issue_reporter, msg, '\U0001FAB2'):
+                return_txt = "<@!{0}>".format(issue_reporter) + "\n2. Please attach the log file for this error.  Logs are found in the `LOG/` folder.  Attach the `.txt` file with the date that matches when you encountered the bug.\nIf this bug occurred outside of the game (such as with the updater), click :x:"
+                survey_msg = await thread.send(return_txt)
+                # await survey_msg.add_reaction('\U000021A9')
+                await survey_msg.add_reaction('\U0000274C')
+            elif await self.chose_emoji(issue_reporter, msg, '\U0001F4A1') or await self.chose_emoji(issue_reporter, msg, '\U0001F524'):
+                completed = True
+            else:
+                await self.respondInvalid(issue_reporter, msg)
+        elif prefix == "2":
+            if self.has_attachment(issue_reporter, msg, '.txt'):
+                return_txt = "<@!{0}>".format(issue_reporter) + "\n3. Was this bug was encountered in a dungeon adventure?"
+                survey_msg = await thread.send(return_txt)
+                # await survey_msg.add_reaction('\U000021A9')
+                await survey_msg.add_reaction('\U00002705')
+                await survey_msg.add_reaction('\U0000274C')
+            elif await self.chose_emoji(issue_reporter, msg, '\U0000274C'):
+                completed = True
+            else:
+                await self.respondInvalid(issue_reporter, msg)
+        elif prefix == "3":
+            if await self.chose_emoji(issue_reporter, msg, '\U00002705'):
+                return_txt = "<@!{0}>".format(issue_reporter) + "\n3a. Please attach a replay (`.rsrec`) of the adventure.  You can check your replays ingame at the title menu under Records, and find the files themselves in the REPLAY/ folder."
+                survey_msg = await thread.send(return_txt)
+                # await survey_msg.add_reaction('\U000021A9')
+            elif await self.chose_emoji(issue_reporter, msg, '\U0000274C'):
+                return_txt = "<@!{0}>".format(issue_reporter) + "\n4. Was this bug encountered while :video_game: Playing or :pencil: Editing the game?"
+                survey_msg = await thread.send(return_txt)
+                # await survey_msg.add_reaction('\U000021A9')
+                await survey_msg.add_reaction('\U0001F3AE')
+                await survey_msg.add_reaction('\U0001F4DD')
+            else:
+                await self.respondInvalid(issue_reporter, msg)
+        elif prefix == "3a":
+            if self.has_attachment(issue_reporter, msg, '.rsrec'):
+                completed = True
+            else:
+                await self.respondInvalid(issue_reporter, msg)
+        elif prefix == "4":
+            if await self.chose_emoji(issue_reporter, msg, '\U0001F4DD'):
+                return_txt = "<@!{0}>".format(issue_reporter) + "\n4a. Starting from when you open the game, can you list the exact steps to reproduce this issue?  :x: if this was already mentioned."
+                survey_msg = await thread.send(return_txt)
+                # await survey_msg.add_reaction('\U000021A9')
+                await survey_msg.add_reaction('\U0000274C')
+            elif await self.chose_emoji(issue_reporter, msg, '\U0001F3AE'):
+                return_txt = "<@!{0}>".format(issue_reporter) + "\n5. Please attach your save file.  You can find it in the `SAVE/` folder named `SAVE.rssv`"
+                survey_msg = await thread.send(return_txt)
+                # await survey_msg.add_reaction('\U000021A9')
+            else:
+                await self.respondInvalid(issue_reporter, msg)
+        elif prefix == "4a":
+            if self.sent_any_text(issue_reporter, msg):
+                completed = True
+            elif await self.chose_emoji(issue_reporter, msg, '\U0000274C'):
+                completed = True
+            else:
+                await self.respondInvalid(issue_reporter, msg)
+        elif prefix == "5":
+            if self.has_attachment(issue_reporter, msg, '.rssv'):
+                return_txt = "<@!{0}>".format(issue_reporter) + "\n5a. Starting from when you load your save file, can you list the exact steps to reproduce this issue?  :x: if this was already mentioned."
+                survey_msg = await thread.send(return_txt)
+                # await survey_msg.add_reaction('\U000021A9')
+                await survey_msg.add_reaction('\U0000274C')
+            else:
+                await self.respondInvalid(issue_reporter, msg)
+        elif prefix == "5a":
+            if self.sent_any_text(issue_reporter, msg):
+                completed = True
+            elif await self.chose_emoji(issue_reporter, msg, '\U0000274C'):
+                completed = True
+            else:
+                await self.respondInvalid(issue_reporter, msg)
+
+        if completed:
+            return_txt = "Questionaire complete! You can continue to post information from here on if you have updates."
+            survey_msg = await thread.send(return_txt)
+            # await survey_msg.add_reaction('\U000021A9')
+            server = self.config.servers[str(msg.guild.id)]
+            server.threads.remove(thread.id)
+            self.saveConfig()
+
+    async def chose_emoji(self, issue_reporter, msg, emoji):
+
+        if msg.author.id != self.client.user.id:
+            return False
+
+        # go through users of the specified emoji
+        for reaction in msg.reactions:
+            if reaction.emoji == emoji:
+                async for user in reaction.users():
+                    # if the issue reporter's response is found, return true
+                    if user.id == issue_reporter:
+                        return True
+
+        return False
+
+    def has_attachment(self, issue_reporter, msg, extension):
+
+        if msg.author.id != issue_reporter:
+            return False
+
+        if len(msg.attachments) == 0:
+            return False
+
+        file_name = msg.attachments[0].filename
+
+        # check the attachment.  if is has the extension, return true
+        _, ext = os.path.splitext(file_name)
+        if ext == extension:
+            return ext
+
+        return True
+
+    def sent_any_text(self, issue_reporter, msg):
+
+        if msg.author.id != issue_reporter:
+            return False
+
+        if msg.content == "":
+            return False
+
+        return True
 
     async def initServer(self, msg, args):
 
@@ -305,12 +478,13 @@ async def on_message(msg: discord.Message):
         server = issue_bot.config.servers[guild_id_str]
         prefix = server.prefix
 
-        if not content.startswith(prefix):
-            return
-        args = content[len(prefix):].split(' ')
-        base_arg = args[0].lower()
 
         if msg.channel.id == server.chat:
+            if not content.startswith(prefix):
+                return
+            args = content[len(prefix):].split(' ')
+            base_arg = args[0].lower()
+
             authorized = await issue_bot.isAuthorized(msg.author, msg.guild)
             if base_arg == "help":
                 await issue_bot.help(msg, args[1:])
@@ -324,18 +498,30 @@ async def on_message(msg: discord.Message):
             else:
                 await msg.channel.send(msg.author.mention + " Unknown Command.")
         elif msg.channel.id == server.issue:
-            if msg.reference is not None:
-                authorized = await issue_bot.isAuthorized(msg.author, msg.guild)
-                if base_arg == "issue" and authorized:
-                    await issue_bot.pushIssue(msg, [])
-                elif base_arg == "text" and authorized:
-                    await issue_bot.pushIssue(msg, ["text"])
-                elif base_arg == "bug" and authorized:
-                    await issue_bot.pushIssue(msg, ["bug"])
-                elif base_arg == "enhancement" and authorized:
-                    await issue_bot.pushIssue(msg, ["enhancement"])
-                else:
-                    await msg.add_reaction('\U0000274C')
+            if content.startswith(prefix):
+                args = content[len(prefix):].split(' ')
+                base_arg = args[0].lower()
+
+                if msg.reference is not None:
+                    authorized = await issue_bot.isAuthorized(msg.author, msg.guild)
+                    if base_arg == "issue" and authorized:
+                        await issue_bot.pushIssue(msg, [])
+                    elif base_arg == "text" and authorized:
+                        await issue_bot.pushIssue(msg, ["text"])
+                    elif base_arg == "bug" and authorized:
+                        await issue_bot.pushIssue(msg, ["bug"])
+                    elif base_arg == "enhancement" and authorized:
+                        await issue_bot.pushIssue(msg, ["enhancement"])
+                    else:
+                        await msg.add_reaction('\U0000274C')
+            else:
+                await issue_bot.beginIssue(msg)
+        elif msg.channel.type == discord.ChannelType.public_thread:
+            if msg.channel.parent.id == server.issue:
+                reporter, prefix, current_msg = await issue_bot.getCurrentStep(msg.channel)
+                if reporter:
+                    await issue_bot.moveToNextStep(reporter, prefix, msg)
+
 
 
     except Exception as e:
@@ -344,17 +530,34 @@ async def on_message(msg: discord.Message):
 @client.event
 async def on_raw_reaction_add(payload):
     await client.wait_until_ready()
-    #try:
 
-        #if payload.user_id == client.user.id:
-        #    return
-        #guild_id_str = str(payload.guild_id)
-        #if payload.channel_id == issue_bot.config.servers[guild_id_str].issue:
-        #    msg = await client.get_channel(payload.channel_id).fetch_message(payload.message_id)
-        #    await issue_bot.pollSubmission(msg)
+    try:
 
-    #except Exception as e:
-    #    await issue_bot.sendError(traceback.format_exc())
+        if payload.user_id == client.user.id:
+            return
+        guild_id_str = str(payload.guild_id)
+        msg = await client.get_channel(payload.channel_id).fetch_message(payload.message_id)
+        server = issue_bot.config.servers[guild_id_str]
+        if payload.channel_id == server.issue:
+            # do not allow reacting if not authorized
+            authorized = await issue_bot.isAuthorized(payload.member, msg.guild)
+            if not authorized:
+                await msg.remove_reaction(payload.emoji, payload.member)
+        elif msg.channel.type == discord.ChannelType.public_thread:
+            if msg.channel.parent.id == server.issue:
+                reporter, prefix, current_msg = await issue_bot.getCurrentStep(msg.channel)
+                if reporter:
+                    if current_msg.id == msg.id:
+                        await issue_bot.moveToNextStep(reporter, prefix, msg)
+                    else:
+                        await msg.remove_reaction(payload.emoji, payload.member)
+                else:
+                    await msg.remove_reaction(payload.emoji, payload.member)
+
+
+
+    except Exception as e:
+        await issue_bot.sendError(traceback.format_exc())
 
 issue_bot = IssueBot(scdir, client)
 
