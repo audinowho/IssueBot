@@ -281,7 +281,7 @@ class IssueBot:
                 return_txt = "<@!{0}>".format(issue_reporter) + "\n3a. Did you :checkered_flag: finish that adventure, or are you still :flag_white: in the middle of it?"
                 survey_msg = await thread.send(return_txt)
                 await survey_msg.add_reaction('\U0001F3C1')
-                await survey_msg.add_reaction('\U0000FE0F')
+                await survey_msg.add_reaction('\U0001F3F3')
             elif await self.chose_emoji(issue_reporter, msg, '\U0000274C'):
                 return_txt = "<@!{0}>".format(issue_reporter) + "\n4. Was this bug encountered while :video_game: Playing or :pencil: Editing the game?"
                 survey_msg = await thread.send(return_txt)
