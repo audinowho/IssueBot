@@ -278,9 +278,10 @@ class IssueBot:
                 await self.respondInvalid(issue_reporter, msg)
         elif prefix == "3":
             if await self.chose_emoji(issue_reporter, msg, '\U00002705'):
-                return_txt = "<@!{0}>".format(issue_reporter) + "\n3a. Please attach a replay (`.rsrec`) of the adventure.  You can check your replays ingame at the title menu under Records, and find the files themselves in the REPLAY/ folder."
+                return_txt = "<@!{0}>".format(issue_reporter) + "\n3a. Did you :checkered_flag: finish that adventure, or are you still :flag_white: in the middle of it?"
                 survey_msg = await thread.send(return_txt)
-                # await survey_msg.add_reaction('\U000021A9')
+                await survey_msg.add_reaction('\U0001F3C1')
+                await survey_msg.add_reaction('\U0000FE0F')
             elif await self.chose_emoji(issue_reporter, msg, '\U0000274C'):
                 return_txt = "<@!{0}>".format(issue_reporter) + "\n4. Was this bug encountered while :video_game: Playing or :pencil: Editing the game?"
                 survey_msg = await thread.send(return_txt)
@@ -290,7 +291,21 @@ class IssueBot:
             else:
                 await self.respondInvalid(issue_reporter, msg)
         elif prefix == "3a":
+            if await self.chose_emoji(issue_reporter, msg, '\U0001F3C1'):
+                return_txt = "<@!{0}>".format(issue_reporter) + "\n3b. Please attach a replay (`.rsrec`) of the adventure.\nCheck replays ingame at the Title Menu under Records, and find the files themselves in the `REPLAY/` folder.\nMake sure the error shows up in the replay."
+                survey_msg = await thread.send(return_txt)
+            elif await self.chose_emoji(issue_reporter, msg, '\U0000FE0F'):
+                return_txt = "<@!{0}>".format(issue_reporter) + "\n3c. Please attach your quicksave file (`QUICKSAVE.rsqs`).  You can find it in the `SAVE/` folder."
+                survey_msg = await thread.send(return_txt)
+            else:
+                await self.respondInvalid(issue_reporter, msg)
+        elif prefix == "3b":
             if self.has_attachment(issue_reporter, msg, '.rsrec'):
+                completed = True
+            else:
+                await self.respondInvalid(issue_reporter, msg)
+        elif prefix == "3c":
+            if self.has_attachment(issue_reporter, msg, '.rsqs'):
                 completed = True
             else:
                 await self.respondInvalid(issue_reporter, msg)
