@@ -294,7 +294,7 @@ class IssueBot:
             if await self.chose_emoji(issue_reporter, msg, '\U0001F3C1'):
                 return_txt = "<@!{0}>".format(issue_reporter) + "\n3b. Please attach a replay (`.rsrec`) of the adventure.\nCheck replays ingame at the Title Menu under Records, and find the files themselves in the `REPLAY/` folder.\nMake sure the error shows up in the replay."
                 survey_msg = await thread.send(return_txt)
-            elif await self.chose_emoji(issue_reporter, msg, '\U0000FE0F'):
+            elif await self.chose_emoji(issue_reporter, msg, '\U0001F3F3'):
                 return_txt = "<@!{0}>".format(issue_reporter) + "\n3c. Please attach your quicksave file (`QUICKSAVE.rsqs`).  You can find it in the `SAVE/` folder."
                 survey_msg = await thread.send(return_txt)
             else:
